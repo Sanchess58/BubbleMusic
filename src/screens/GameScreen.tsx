@@ -1,28 +1,37 @@
-import React, {useEffect, useRef, useState} from 'react';
-import {
-  Dimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  Gesture,
-  GestureDetector,
-} from 'react-native-gesture-handler';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import Bubble from '../components/Bubble';
-import {chart, ChartEvent} from '../game/chart';
+import { chart, ChartEvent } from '../game/chart';
+import {
+  FEEDBACK_CLEAR_DELAY_MS,
+  FIELD_TOP_OFFSET,
+  FLOW_DECAY_PER_SECOND,
+  FLOW_GAIN,
+  FLOW_MAX,
+  GAME_DURATION_SECONDS,
+  HOLD_PRESS_DURATION_MS,
+  HOLD_RADIUS_MULTIPLIER,
+  HIT_RADIUS_MULTIPLIER,
+  PAN_MIN_STEPS,
+  PAN_STEP_DISTANCE,
+  PAN_TOUCH_TOLERANCE,
+  UI_COLORS,
+} from '../game/constants';
 import {
   baseValue,
   comboMultiplier,
+  formatMinutesSeconds,
+  normalizeUrgency,
   quality,
   Quality,
   timingMultiplier,
 } from '../game/score';
 
-const {width: W, height: H} = Dimensions.get('window');
-const FIELD_H = H - 120;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const FIELD_H = SCREEN_HEIGHT - FIELD_TOP_OFFSET;
+const MAX_FRAME_DELTA_SECONDS = 0.05;
 
 type Live = ChartEvent & {
   id: number;
@@ -35,7 +44,7 @@ type Props = {
   onStart: () => void;
 };
 
-export default function GameScreen({started, onStart}: Props) {
+export default function GameScreen({ started, onStart }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -65,10 +74,9 @@ export default function GameScreen({started, onStart}: Props) {
       }
 
       const now = Date.now();
-      const dt = Math.min(0.05, (now - last.current) / 1000);
+      const dt = Math.min(MAX_FRAME_DELTA_SECONDS, (now - last.current) / 1000);
 
       last.current = now;
-
       const nextElapsed = elapsedRef.current + dt;
       elapsedRef.current = nextElapsed;
 
@@ -88,16 +96,13 @@ export default function GameScreen({started, onStart}: Props) {
       }
 
       active.current = active.current.filter(
-        bubble =>
-          !bubble.dead &&
-          nextElapsed - bubble.born < bubble.life,
+        bubble => !bubble.dead && nextElapsed - bubble.born < bubble.life,
       );
 
       setBubbles([...active.current]);
+      setFlow(value => Math.max(0, value - dt * FLOW_DECAY_PER_SECOND));
 
-      setFlow(value => Math.max(0, value - dt * 2.2));
-
-      if (nextElapsed >= 60) {
+      if (nextElapsed >= GAME_DURATION_SECONDS) {
         running.current = false;
         return;
       }
@@ -127,24 +132,12 @@ export default function GameScreen({started, onStart}: Props) {
 
     setScore(value => value + points);
     setCombo(value => value + 1);
-
-    setFlow(value =>
-      Math.min(
-        100,
-        value +
-          (q === 'PERFECT'
-            ? 5
-            : q === 'GREAT'
-              ? 3
-              : 2),
-      ),
-    );
-
+    setFlow(value => Math.min(FLOW_MAX, value + FLOW_GAIN[q]));
     setFeedback(q);
 
     setTimeout(() => {
       setFeedback('');
-    }, 500);
+    }, FEEDBACK_CLEAR_DELAY_MS);
 
     setBubbles([...active.current]);
   };
@@ -158,11 +151,10 @@ export default function GameScreen({started, onStart}: Props) {
         continue;
       }
 
-      const x = bubble.x * W;
+      const x = bubble.x * SCREEN_WIDTH;
       const y = bubble.y * FIELD_H;
-
       const d = Math.hypot(px - x, py - y);
-      const radius = bubble.size * W * 1.7;
+      const radius = bubble.size * SCREEN_WIDTH * HIT_RADIUS_MULTIPLIER;
 
       if (d < radius && d < distance) {
         best = bubble;
@@ -185,55 +177,45 @@ export default function GameScreen({started, onStart}: Props) {
 
   const pan = Gesture.Pan()
     .onEnd(event => {
-      const distance = Math.hypot(
-        event.translationX,
-        event.translationY,
-      );
+      const distance = Math.hypot(event.translationX, event.translationY);
 
-      if (distance < 18) {
+      if (distance < PAN_TOUCH_TOLERANCE) {
         hit(event.x, event.y);
         return;
       }
 
       const steps = Math.max(
-        3,
-        Math.ceil(distance / 35),
+        PAN_MIN_STEPS,
+        Math.ceil(distance / PAN_STEP_DISTANCE),
       );
 
-      for (let i = 0; i <= steps; i++) {
+      for (let i = 0; i <= steps; i += 1) {
         hit(
-          event.x -
-            event.translationX +
-            (event.translationX * i) / steps,
-          event.y -
-            event.translationY +
-            (event.translationY * i) / steps,
+          event.x - event.translationX + (event.translationX * i) / steps,
+          event.y - event.translationY + (event.translationY * i) / steps,
         );
       }
     })
     .runOnJS(true);
 
   const long = Gesture.LongPress()
-    .minDuration(650)
+    .minDuration(HOLD_PRESS_DURATION_MS)
     .onEnd(event => {
       let best: Live | undefined;
       let distance = Infinity;
 
       for (const bubble of active.current) {
-        if (
-          bubble.dead ||
-          bubble.type !== 'hold'
-        ) {
+        if (bubble.dead || bubble.type !== 'hold') {
           continue;
         }
 
         const d = Math.hypot(
-          event.x - bubble.x * W,
+          event.x - bubble.x * SCREEN_WIDTH,
           event.y - bubble.y * FIELD_H,
         );
 
         if (
-          d < bubble.size * W * 1.8 &&
+          d < bubble.size * SCREEN_WIDTH * HOLD_RADIUS_MULTIPLIER &&
           d < distance
         ) {
           best = bubble;
@@ -254,35 +236,22 @@ export default function GameScreen({started, onStart}: Props) {
       <View style={styles.hud}>
         <View>
           <Text style={styles.label}>SCORE</Text>
-          <Text style={styles.value}>
-            {score.toLocaleString()}
-          </Text>
+          <Text style={styles.value}>{score.toLocaleString()}</Text>
         </View>
 
         <View style={styles.center}>
           <Text style={styles.label}>COMBO</Text>
-          <Text style={styles.combo}>
-            ×{combo}
-          </Text>
+          <Text style={styles.combo}>×{combo}</Text>
         </View>
 
         <View style={styles.right}>
           <Text style={styles.label}>FLOW</Text>
-          <Text style={styles.value}>
-            {Math.round(flow)}%
-          </Text>
+          <Text style={styles.value}>{Math.round(flow)}%</Text>
         </View>
       </View>
 
       <View style={styles.flow}>
-        <View
-          style={[
-            styles.flowIn,
-            {
-              width: `${flow}%`,
-            },
-          ]}
-        />
+        <View style={[styles.flowIn, { width: `${flow}%` }]} />
       </View>
 
       <GestureDetector gesture={gesture}>
@@ -290,19 +259,11 @@ export default function GameScreen({started, onStart}: Props) {
           {bubbles.map(bubble => (
             <Bubble
               key={bubble.id}
-              x={bubble.x * W}
+              x={bubble.x * SCREEN_WIDTH}
               y={bubble.y * FIELD_H}
-              size={bubble.size * W}
+              size={bubble.size * SCREEN_WIDTH}
               color={bubble.color}
-              urgency={Math.min(
-                1,
-                Math.max(
-                  0,
-                  (elapsed - bubble.born) /
-                    bubble.life -
-                    0.25,
-                ) / 0.6,
-              )}
+              urgency={normalizeUrgency(elapsed - bubble.born, bubble.life)}
             />
           ))}
 
@@ -311,12 +272,10 @@ export default function GameScreen({started, onStart}: Props) {
               style={[
                 styles.feedback,
                 {
-                  color:
-                    feedback === 'MISS'
-                      ? '#ff5577'
-                      : '#fff',
+                  color: feedback === 'MISS' ? UI_COLORS.miss : UI_COLORS.text,
                 },
-              ]}>
+              ]}
+            >
               {feedback}
             </Text>
           )}
@@ -324,42 +283,24 @@ export default function GameScreen({started, onStart}: Props) {
       </GestureDetector>
 
       <View style={styles.bottom}>
-        <Text style={styles.track}>
-          BUBBLE MUSIC — WIP DEMO
-        </Text>
-
+        <Text style={styles.track}>BUBBLE MUSIC — WIP DEMO</Text>
         <Text style={styles.time}>
-          {Math.floor(elapsed / 60)}:
-          {String(Math.floor(elapsed) % 60).padStart(
-            2,
-            '0',
-          )}{' '}
-          / 1:00
+          {formatMinutesSeconds(elapsed)} /{' '}
+          {formatMinutesSeconds(GAME_DURATION_SECONDS)}
         </Text>
       </View>
 
       {!started && (
         <View style={styles.overlay}>
           <View style={styles.card}>
-            <Text style={styles.logo}>
-              BUBBLE
-            </Text>
-
-            <Text style={styles.sub}>
-              • MUSIC •
-            </Text>
-
+            <Text style={styles.logo}>BUBBLE</Text>
+            <Text style={styles.sub}>• MUSIC •</Text>
             <Text style={styles.info}>
-              Лопай пузыри в ритм. TAP, SWIPE и HOLD.
-              Сохраняй COMBO и FLOW.
+              Лопай пузыри в ритм. TAP, SWIPE и HOLD. Сохраняй COMBO и FLOW.
             </Text>
 
-            <Pressable
-              style={styles.button}
-              onPress={onStart}>
-              <Text style={styles.buttonText}>
-                НАЧАТЬ ИГРУ
-              </Text>
+            <Pressable style={styles.button} onPress={onStart}>
+              <Text style={styles.buttonText}>НАЧАТЬ ИГРУ</Text>
             </Pressable>
           </View>
         </View>
@@ -371,7 +312,7 @@ export default function GameScreen({started, onStart}: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#050612',
+    backgroundColor: UI_COLORS.background,
   },
 
   hud: {
@@ -393,33 +334,33 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 9,
     letterSpacing: 2,
-    color: 'rgba(255,255,255,.5)',
+    color: UI_COLORS.textMuted,
     fontWeight: '700',
   },
 
   value: {
     fontSize: 22,
-    color: '#fff',
+    color: UI_COLORS.text,
     fontWeight: '900',
   },
 
   combo: {
     fontSize: 29,
-    color: '#fff',
+    color: UI_COLORS.text,
     fontWeight: '900',
   },
 
   flow: {
     height: 4,
     marginHorizontal: 18,
-    backgroundColor: 'rgba(255,255,255,.1)',
+    backgroundColor: UI_COLORS.panel,
     borderRadius: 5,
     overflow: 'hidden',
   },
 
   flowIn: {
     height: '100%',
-    backgroundColor: '#8b6cff',
+    backgroundColor: UI_COLORS.accent,
   },
 
   field: {
@@ -445,17 +386,17 @@ const styles = StyleSheet.create({
   track: {
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,.8)',
+    color: 'rgba(255,255,255,0.8)',
   },
 
   time: {
     fontSize: 10,
-    color: 'rgba(255,255,255,.35)',
+    color: 'rgba(255,255,255,0.35)',
   },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#050612',
+    backgroundColor: UI_COLORS.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -465,8 +406,8 @@ const styles = StyleSheet.create({
     padding: 28,
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,.13)',
-    backgroundColor: 'rgba(10,10,28,.96)',
+    borderColor: UI_COLORS.panelStrong,
+    backgroundColor: UI_COLORS.panelDark,
     alignItems: 'center',
   },
 
@@ -474,13 +415,13 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontWeight: '900',
     letterSpacing: -2,
-    color: '#8b6cff',
+    color: UI_COLORS.accent,
   },
 
   sub: {
     fontSize: 11,
     letterSpacing: 4,
-    color: 'rgba(255,255,255,.45)',
+    color: 'rgba(255,255,255,0.45)',
     marginTop: 4,
   },
 
@@ -488,12 +429,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 21,
     textAlign: 'center',
-    color: 'rgba(255,255,255,.68)',
+    color: 'rgba(255,255,255,0.68)',
     marginVertical: 25,
   },
 
   button: {
-    backgroundColor: '#665cff',
+    backgroundColor: UI_COLORS.primary,
     paddingHorizontal: 26,
     paddingVertical: 14,
     borderRadius: 15,
@@ -501,7 +442,7 @@ const styles = StyleSheet.create({
 
   buttonText: {
     fontWeight: '900',
-    color: '#fff',
+    color: UI_COLORS.text,
     fontSize: 14,
   },
 });

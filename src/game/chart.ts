@@ -1,36 +1,88 @@
+import { BUBBLE_COLORS } from './constants';
+
 export type BubbleType = 'tap' | 'hold' | 'chain' | 'burst';
+
 export type ChartEvent = {
-  time:number; type:BubbleType; x:number; y:number; size:number;
-  color:string; life:number; duration?:number; chainId?:string;
+  time: number;
+  type: BubbleType;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  life: number;
+  duration?: number;
+  chainId?: string;
 };
 
-const colors=['#4EE7FF','#8B6CFF','#FF4FC3','#FFB84E'];
-export const chart:ChartEvent[] = [];
+const CHART_COLOR_COUNT = 3;
+const PRESET_EVENTS = 110;
+const INITIAL_TIME_OFFSET = 1;
+const BEAT_STEP_SECONDS = 0.5;
+const HOLD_EVENT_MOD = 12;
+const HOLD_EVENT_INDEX = 6;
+const BURST_EVENT_MOD = 16;
+const PATTERN_CHAIN_COUNT = 4;
+const WAVE_EVENTS = [18, 36, 54] as const;
+const CHAIN_PATTERNS = [
+  [8, 0.18, 0.32],
+  [14, 0.32, 0.65],
+  [22, 0.72, 0.3],
+  [30, 0.25, 0.7],
+  [40, 0.78, 0.62],
+  [48, 0.22, 0.28],
+] as const;
 
-for(let i=0;i<110;i++){
-  const t=1+i*.5;
+export const chart: ChartEvent[] = [];
+
+for (let i = 0; i < PRESET_EVENTS; i += 1) {
+  const time = INITIAL_TIME_OFFSET + i * BEAT_STEP_SECONDS;
+  const isBurst = i % BURST_EVENT_MOD === 0;
+  const isHold = i % HOLD_EVENT_MOD === HOLD_EVENT_INDEX;
+
   chart.push({
-    time:t,
-    type:i%16===0?'burst':i%12===6?'hold':'tap',
-    x:.5+Math.sin(i*.83)*.34,
-    y:.5+Math.cos(i*.61)*.34,
-    size:i%16===0?.085:i%12===6?.07:.045,
-    color:colors[i%3],
-    life:i%12===6?1.9:1.08,
-    duration:i%12===6?1.7:undefined
+    time,
+    type: isBurst ? 'burst' : isHold ? 'hold' : 'tap',
+    x: 0.5 + Math.sin(i * 0.83) * 0.34,
+    y: 0.5 + Math.cos(i * 0.61) * 0.34,
+    size: isBurst ? 0.085 : isHold ? 0.07 : 0.045,
+    color: BUBBLE_COLORS[i % CHART_COLOR_COUNT],
+    life: isHold ? 1.9 : 1.08,
+    duration: isHold ? 1.7 : undefined,
   });
 }
-[[8,.18,.32],[14,.32,.65],[22,.72,.3],[30,.25,.7],[40,.78,.62],[48,.22,.28]].forEach((a,k)=>{
-  for(let j=0;j<4;j++) chart.push({
-    time:a[0]+j*.18,type:'chain',x:a[1]+j*.12,y:a[2]+j*.09,size:.036,
-    color:colors[(k+1)%3],life:.72,chainId:'c'+k
-  });
-});
-[18,36,54].forEach((t,k)=>{
-  for(let j=0;j<7;j++){
-    const a=j/7*Math.PI*2;
-    chart.push({time:t+j*.11,type:'burst',x:.5+Math.cos(a)*.38,y:.5+Math.sin(a)*.36,
-      size:.047,color:colors[(j+k)%4],life:.78,chainId:'b'+k});
+
+CHAIN_PATTERNS.forEach((pattern, patternIndex) => {
+  const [baseTime, startX, startY] = pattern;
+
+  for (let i = 0; i < PATTERN_CHAIN_COUNT; i += 1) {
+    chart.push({
+      time: baseTime + i * 0.18,
+      type: 'chain',
+      x: startX + i * 0.12,
+      y: startY + i * 0.09,
+      size: 0.036,
+      color: BUBBLE_COLORS[(patternIndex + 1) % CHART_COLOR_COUNT],
+      life: 0.72,
+      chainId: `c${patternIndex}`,
+    });
   }
 });
-chart.sort((a,b)=>a.time-b.time);
+
+WAVE_EVENTS.forEach((baseTime, waveIndex) => {
+  for (let i = 0; i < 7; i += 1) {
+    const angle = (i / 7) * Math.PI * 2;
+
+    chart.push({
+      time: baseTime + i * 0.11,
+      type: 'burst',
+      x: 0.5 + Math.cos(angle) * 0.38,
+      y: 0.5 + Math.sin(angle) * 0.36,
+      size: 0.047,
+      color: BUBBLE_COLORS[(i + waveIndex) % BUBBLE_COLORS.length],
+      life: 0.78,
+      chainId: `b${waveIndex}`,
+    });
+  }
+});
+
+chart.sort((a, b) => a.time - b.time);
