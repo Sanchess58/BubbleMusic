@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -23,6 +23,7 @@ type Props = {
   size: number;
   color: string;
   urgency: number;
+  onPress?: () => void;
 };
 
 export default function Bubble({ x, y, size, color, urgency }: Props) {
@@ -30,7 +31,9 @@ export default function Bubble({ x, y, size, color, urgency }: Props) {
 
   useEffect(() => {
     pulse.value = withRepeat(
-      withTiming(PULSE_SCALE, { duration: PULSE_ANIMATION_DURATION_MS }),
+      withTiming(PULSE_SCALE, {
+        duration: PULSE_ANIMATION_DURATION_MS,
+      }),
       -1,
       true,
     );
@@ -42,6 +45,7 @@ export default function Bubble({ x, y, size, color, urgency }: Props) {
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         styles.bubble,
         {
@@ -66,6 +70,7 @@ export default function Bubble({ x, y, size, color, urgency }: Props) {
           },
         ]}
       />
+
       <View
         style={[
           styles.ring,
@@ -81,6 +86,7 @@ export default function Bubble({ x, y, size, color, urgency }: Props) {
 }
 
 const styles = StyleSheet.create({
+  pressable: { position: 'absolute' },
   bubble: {
     position: 'absolute',
     borderWidth: 1.5,

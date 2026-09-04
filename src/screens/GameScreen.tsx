@@ -28,6 +28,8 @@ import {
   Quality,
   timingMultiplier,
 } from '../game/score';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Hood } from '../widgets';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const FIELD_H = SCREEN_HEIGHT - FIELD_TOP_OFFSET;
@@ -42,15 +44,21 @@ type Live = ChartEvent & {
 type Props = {
   started: boolean;
   onStart: () => void;
+  onRestart?: () => void;
 };
 
-export default function GameScreen({ started, onStart }: Props) {
+export default function GameScreen({ started, onStart, onRestart }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [flow, setFlow] = useState(0);
   const [bubbles, setBubbles] = useState<Live[]>([]);
   const [feedback, setFeedback] = useState('');
+
+  const [fieldLayout, setFieldLayout] = useState({
+    width: SCREEN_WIDTH,
+    height: FIELD_H,
+  });
 
   const index = useRef(0);
   const id = useRef(0);
@@ -151,10 +159,10 @@ export default function GameScreen({ started, onStart }: Props) {
         continue;
       }
 
-      const x = bubble.x * SCREEN_WIDTH;
-      const y = bubble.y * FIELD_H;
+      const x = bubble.x * fieldLayout.width;
+      const y = bubble.y * fieldLayout.height;
       const d = Math.hypot(px - x, py - y);
-      const radius = bubble.size * SCREEN_WIDTH * HIT_RADIUS_MULTIPLIER;
+      const radius = bubble.size * fieldLayout.width * HIT_RADIUS_MULTIPLIER;
 
       if (d < radius && d < distance) {
         best = bubble;
@@ -180,7 +188,6 @@ export default function GameScreen({ started, onStart }: Props) {
       const distance = Math.hypot(event.translationX, event.translationY);
 
       if (distance < PAN_TOUCH_TOLERANCE) {
-        hit(event.x, event.y);
         return;
       }
 
@@ -192,6 +199,7 @@ export default function GameScreen({ started, onStart }: Props) {
       for (let i = 0; i <= steps; i += 1) {
         hit(
           event.x - event.translationX + (event.translationX * i) / steps,
+
           event.y - event.translationY + (event.translationY * i) / steps,
         );
       }
@@ -229,39 +237,41 @@ export default function GameScreen({ started, onStart }: Props) {
     })
     .runOnJS(true);
 
-  const gesture = Gesture.Exclusive(long, pan);
+  const tap = Gesture.Tap()
+    .maxDuration(250)
+    .onEnd(event => {
+      hit(event.x, event.y);
+    })
+    .runOnJS(true);
+
+  const gesture = Gesture.Exclusive(long, tap, pan);
 
   return (
     <View style={styles.root}>
-      <View style={styles.hud}>
-        <View>
-          <Text style={styles.label}>SCORE</Text>
-          <Text style={styles.value}>{score.toLocaleString()}</Text>
-        </View>
-
-        <View style={styles.center}>
-          <Text style={styles.label}>COMBO</Text>
-          <Text style={styles.combo}>×{combo}</Text>
-        </View>
-
-        <View style={styles.right}>
-          <Text style={styles.label}>FLOW</Text>
-          <Text style={styles.value}>{Math.round(flow)}%</Text>
-        </View>
-      </View>
+      <Hood combo={combo} flow={flow} score={score} />
 
       <View style={styles.flow}>
         <View style={[styles.flowIn, { width: `${flow}%` }]} />
       </View>
 
       <GestureDetector gesture={gesture}>
-        <View style={styles.field}>
+        <View
+          style={styles.field}
+          onLayout={event => {
+            const { width, height } = event.nativeEvent.layout;
+
+            setFieldLayout({
+              width,
+              height,
+            });
+          }}
+        >
           {bubbles.map(bubble => (
             <Bubble
               key={bubble.id}
-              x={bubble.x * SCREEN_WIDTH}
-              y={bubble.y * FIELD_H}
-              size={bubble.size * SCREEN_WIDTH}
+              x={bubble.x * fieldLayout.width}
+              y={bubble.y * fieldLayout.height}
+              size={bubble.size * fieldLayout.width}
               color={bubble.color}
               urgency={normalizeUrgency(elapsed - bubble.born, bubble.life)}
             />
@@ -288,9 +298,13 @@ export default function GameScreen({ started, onStart }: Props) {
           {formatMinutesSeconds(elapsed)} /{' '}
           {formatMinutesSeconds(GAME_DURATION_SECONDS)}
         </Text>
+
+        <Pressable style={styles.button} onPress={onRestart}>
+          <Text style={styles.buttonText}>ЗАНОВО</Text>
+        </Pressable>
       </View>
 
-      {!started && (
+      {started && (
         <View style={styles.overlay}>
           <View style={styles.card}>
             <Text style={styles.logo}>BUBBLE</Text>
@@ -313,6 +327,12 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: UI_COLORS.background,
+  },
+
+  container: {
+    flex: 1,
+    paddingTop: 0,
+    paddingBottom: 20,
   },
 
   hud: {
@@ -395,7 +415,7 @@ const styles = StyleSheet.create({
   },
 
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    // ...StyleSheet.absoluteFillObject,
     backgroundColor: UI_COLORS.background,
     alignItems: 'center',
     justifyContent: 'center',
