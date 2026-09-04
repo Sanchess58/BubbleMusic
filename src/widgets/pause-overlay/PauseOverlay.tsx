@@ -1,19 +1,21 @@
 import { Button, Text, View } from 'react-native';
+import { styles } from './styles';
 
-interface IPauseScreenProps {
+interface IPauseOverlayProps {
   onContinue: () => void;
-  onRestart: () => void;
+  onRestart?: () => void;
   onMenu: () => void;
-  onSound: () => void;
+  onSound?: () => void;
 }
 
-export const PauseScreen = ({
+export const PauseOverlay = ({
   onContinue,
   onRestart,
   onMenu,
   onSound,
-}: IPauseScreenProps) => {
+}: IPauseOverlayProps) => {
   interface IPauseButton {
+    key?: string;
     title: string;
     onPress: () => void;
   }
@@ -32,7 +34,7 @@ export const PauseScreen = ({
     },
     {
       title: BUTTONS_TITLES.RESTART,
-      onPress: onRestart,
+      onPress: () => {},
     },
     {
       title: BUTTONS_TITLES.MENU,
@@ -40,7 +42,7 @@ export const PauseScreen = ({
     },
     {
       title: BUTTONS_TITLES.SOUND,
-      onPress: onSound,
+      onPress: () => {},
     },
   ];
 
@@ -51,10 +53,10 @@ export const PauseScreen = ({
   };
 
   return (
-    <View>
-      <Text>Пауза</Text>
+    <View style={styles.overlay}>
+      <Text style={styles.title}>Пауза</Text>
 
-      {renderButton()}
+      <View style={styles.buttonsContainer}>{renderButton()}</View>
     </View>
   );
 };

@@ -1,19 +1,27 @@
 import React, { useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
+import { StatusBar, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import GameScreen from './screens/GameScreen';
 import { UI_COLORS } from './game/constants';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { GameScreen, MainScreen } from './screens';
 
 export default function App() {
-  const [started, setStarted] = useState(false);
+  const [screen, setScreen] = useState<'menu' | 'game' | 'results'>('menu');
+
+  const renderScreens = () => {
+    switch (screen) {
+      case 'menu':
+        return <MainScreen onStart={() => setScreen('game')} />;
+      case 'game':
+        return <GameScreen onMenu={() => setScreen('menu')} />;
+    }
+  };
 
   return (
     <GestureHandlerRootView style={styles.root}>
       <StatusBar barStyle="light-content" />
-      <SafeAreaView style={styles.root}>
-        <GameScreen started={started} onStart={() => setStarted(true)} />
-      </SafeAreaView>
+      <SafeAreaView style={styles.root}>{renderScreens()}</SafeAreaView>
     </GestureHandlerRootView>
   );
 }

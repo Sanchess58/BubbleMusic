@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-import Bubble from '../components/Bubble';
-import { chart, ChartEvent } from '../game/chart';
+import Bubble from '../../components/Bubble';
+import { chart, ChartEvent } from '../../game/chart';
 import {
   FEEDBACK_CLEAR_DELAY_MS,
   FIELD_TOP_OFFSET,
@@ -18,7 +18,7 @@ import {
   PAN_STEP_DISTANCE,
   PAN_TOUCH_TOLERANCE,
   UI_COLORS,
-} from '../game/constants';
+} from '../../game/constants';
 import {
   baseValue,
   comboMultiplier,
@@ -27,9 +27,10 @@ import {
   quality,
   Quality,
   timingMultiplier,
-} from '../game/score';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Hood } from '../widgets';
+} from '../../game/score';
+// import { SafeAreaView } from 'react-native-safe-area-context';
+import { Hood, PauseOverlay } from '../../widgets';
+import { useAction } from './hooks/use-action';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const FIELD_H = SCREEN_HEIGHT - FIELD_TOP_OFFSET;
@@ -41,19 +42,30 @@ type Live = ChartEvent & {
   dead?: boolean;
 };
 
-type Props = {
-  started: boolean;
-  onStart: () => void;
-  onRestart?: () => void;
-};
+interface IGameScreenProps {
+  onMenu: () => void;
+}
 
-export default function GameScreen({ started, onStart, onRestart }: Props) {
+export const GameScreen = ({ onMenu }: IGameScreenProps) => {
   const [elapsed, setElapsed] = useState(0);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [flow, setFlow] = useState(0);
   const [bubbles, setBubbles] = useState<Live[]>([]);
   const [feedback, setFeedback] = useState('');
+
+  // GAME STATE
+  // const [started, setStarted] = useState<boolean>(false);
+  // const [paused, setPaused] = useState<boolean>(false);
+
+  const {
+    started,
+    paused,
+    handleStart,
+    handleContinue,
+    handlePause,
+    handleMenu,
+  } = useAction();
 
   const [fieldLayout, setFieldLayout] = useState({
     width: SCREEN_WIDTH,
@@ -248,7 +260,7 @@ export default function GameScreen({ started, onStart, onRestart }: Props) {
 
   return (
     <View style={styles.root}>
-      <Hood combo={combo} flow={flow} score={score} />
+      <Hood combo={combo} flow={flow} score={score} onPause={handlePause} />
 
       <View style={styles.flow}>
         <View style={[styles.flowIn, { width: `${flow}%` }]} />
@@ -292,19 +304,21 @@ export default function GameScreen({ started, onStart, onRestart }: Props) {
         </View>
       </GestureDetector>
 
-      <View style={styles.bottom}>
+      {/* <View style={styles.bottom}>
         <Text style={styles.track}>BUBBLE MUSIC — WIP DEMO</Text>
         <Text style={styles.time}>
           {formatMinutesSeconds(elapsed)} /{' '}
           {formatMinutesSeconds(GAME_DURATION_SECONDS)}
         </Text>
 
-        <Pressable style={styles.button} onPress={onRestart}>
+        <Pressable style={styles.button} onPress={handleStart}>
           <Text style={styles.buttonText}>ЗАНОВО</Text>
         </Pressable>
-      </View>
+      </View> */}
 
-      {started && (
+      {paused && <PauseOverlay onContinue={handleContinue} onMenu={onMenu} />}
+
+      {!started && (
         <View style={styles.overlay}>
           <View style={styles.card}>
             <Text style={styles.logo}>BUBBLE</Text>
@@ -313,7 +327,7 @@ export default function GameScreen({ started, onStart, onRestart }: Props) {
               Лопай пузыри в ритм. TAP, SWIPE и HOLD. Сохраняй COMBO и FLOW.
             </Text>
 
-            <Pressable style={styles.button} onPress={onStart}>
+            <Pressable style={styles.button} onPress={handleStart}>
               <Text style={styles.buttonText}>НАЧАТЬ ИГРУ</Text>
             </Pressable>
           </View>
@@ -321,7 +335,7 @@ export default function GameScreen({ started, onStart, onRestart }: Props) {
       )}
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   root: {

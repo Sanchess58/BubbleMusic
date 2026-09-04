@@ -3,13 +3,14 @@ import { Text, View } from 'react-native';
 import { styles } from './styles';
 
 interface IHoodItemProps {
+  id: string;
   title: string;
   value: ReactNode | string | number;
 }
 
-export const HoodItem = ({ title, value }: IHoodItemProps) => {
+export const HoodItem = ({ id, title, value }: IHoodItemProps) => {
   return (
-    <View style={styles.hoodItemContainer}>
+    <View style={styles.hoodItemContainer} id={id}>
       <Text style={styles.label}>{title}</Text>
       <Text style={[styles.value, value === 'combo' && styles.combo]}>
         {value}

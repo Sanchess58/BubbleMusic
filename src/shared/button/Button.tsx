@@ -1,17 +1,18 @@
-import { Button as ReactNativeButton, View } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { styles } from './styles';
 
 interface IButtonProps {
+  icon: string;
+  iconOnly?: boolean;
   title: string;
   onPress: () => void;
 }
 
-export const Button = ({ title, onPress }: IButtonProps) => {
+export const Button = ({ icon, iconOnly, title, onPress }: IButtonProps) => {
   return (
-    <ReactNativeButton
-      style={styles.button}
-      title={title}
-      onPress={onPress}
-    ></ReactNativeButton>
+    <Pressable onPress={onPress}>
+      {(icon || iconOnly) && <img src={icon} />}
+      {!iconOnly && <Text>{title}</Text>}
+    </Pressable>
   );
 };
